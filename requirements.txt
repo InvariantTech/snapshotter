@@ -1,4 +1,4 @@
-git+https://github.com/ankenyr/netconan.git
+git+https://github.com/ankenyr/netconan.git@my_main
 # -e /Users/rankeny/ankenyr_netconan/
 git+https://github.com/ankenyr/bf-aws-snapshot.git
 # -e /Users/rankeny/bf-aws-snapshot
