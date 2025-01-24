@@ -12,8 +12,9 @@ from netconan import sensitive_item_removal
 from bf_aws_snapshot import aws_data_getter
 from bf_aws_snapshot import awshelper
 
-DEENCRYPTED = "fakefakefakefake"
-ENCRYPTED = "\"$9$/B66ApBIRSevL69ORhcvMwYgoJDmPQF39GD.5z3tp0BIcrvx7V\""
+DEENCRYPTED = "fakefakefakefakefakefakefakefake"
+ENCRYPTED = "$9$zCSBn/tu0IcyKQFA0B1yrNdbs2aiHmf5F4ajqP56/Ctu1EyMWxws4BIMX7-2gUjHq.5tpBcSeQFnCuBSyM8XNds2gJDi.Lx"
+SECRET_RE = re.compile(re.escape('/* SECRET-DATA */'))
 
 def contains_string(file_path, search_string):
   """Check if the file contains the specified string."""
@@ -38,7 +39,7 @@ def copy_git_dir(src_dir, dest_dir):
           with open(src_file_path) as f:
             content = ''.join([line for line in f.readlines() if not line.startswith('#') and not line.startswith('set ')])
             # Filter for secrets and replace them with the same thing
-            content = re.sub(r"(?<=pre-shared-key ascii-text )\/\* SECRET-DATA \*\/", ENCRYPTED, content)
+            content = re.sub(SECRET_RE, ENCRYPTED, content)
           with open(os.path.join(dest_dir_path, file), 'w') as f:
             f.write(content)
           
@@ -66,6 +67,19 @@ def run_aws_snapshot(regions, role, output_dir):
       awshelper.aws_init(regions, [], skip_data, session[1])
       aws_data_getter.snapshot_configs(output_dir, session[0])
 
+def fix_vpn_connections(path):
+  for root, _, files in os.walk(pathlib.Path(path).joinpath('aws_configs')):
+    for file in files:
+      if file == 'VpnConnections.json':
+        with open(os.path.join(root, file)) as of:
+          
+          content = json.load(of)
+          for connection in content['VpnConnections']:
+            connection['Options']['TunnelOptions'][0]['PreSharedKey'] = DEENCRYPTED
+            connection['Options']['TunnelOptions'][1]['PreSharedKey'] = DEENCRYPTED
+        with open(os.path.join(root, file), 'w') as of:
+          json.dump(content, of, indent=2)
+        
 
 def main():
   parser = ArgumentParser(description="snapshot")
@@ -75,12 +89,14 @@ def main():
   parser.add_argument('-g', '--git-folder', dest='git_folder', help="Git directory containing Oxidized backups.", required=True)
   args = parser.parse_args()
 
+
   if not os.path.exists(args.output_folder):
     os.makedirs(args.output_folder)
   with tempfile.TemporaryDirectory() as temp_dir:
     temp_path = pathlib.Path(temp_dir)
     copy_git_dir(args.git_folder, temp_path.joinpath('configs'))
     run_aws_snapshot(args.regions, args.role, temp_dir)
+    fix_vpn_connections(temp_dir)
     # Salt can be static as the generation algorithm is not truly random. The destruction of the
     # encrypted password is complete regardless.
     netconan.anonymize_files.anonymize_files(temp_path, args.output_folder, True, False, 'salt')
