@@ -2,6 +2,7 @@ from argparse import ArgumentParser, ArgumentTypeError
 import json
 import os
 import re
+import netconan
 import shutil
 import pathlib
 import tempfile
@@ -65,20 +66,6 @@ def run_aws_snapshot(regions, role, output_dir):
       awshelper.aws_init(regions, [], skip_data, session[1])
       aws_data_getter.snapshot_configs(output_dir, session[0])
 
-def fix_vpn_connections(path):
-  for root, _, files in os.walk(pathlib.Path(path).joinpath('aws_configs')):
-    for file in files:
-      if file == 'VpnConnections.json':
-        with open(os.path.join(root, file)) as of:
-          
-          content = json.load(of)
-          for connection in content['VpnConnections']:
-            connection['Options']['TunnelOptions'][0]['PreSharedKey'] = DEENCRYPTED
-            connection['Options']['TunnelOptions'][1]['PreSharedKey'] = DEENCRYPTED
-        with open(os.path.join(root, file), 'w') as of:
-          json.dump(content, of, indent=2)
-        pass
-  pass
 
 def main():
   parser = ArgumentParser(description="snapshot")
@@ -94,8 +81,9 @@ def main():
     temp_path = pathlib.Path(temp_dir)
     copy_git_dir(args.git_folder, temp_path.joinpath('configs'))
     run_aws_snapshot(args.regions, args.role, temp_dir)
-    fix_vpn_connections(temp_path)
-    shutil.move(temp_dir, args.output_folder)
+    # Salt can be static as the generation algorithm is not truly random. The destruction of the
+    # encrypted password is complete regardless.
+    netconan.anonymize_files.anonymize_files(temp_path, args.output_folder, True, False, 'salt')
     
 
 if __name__ == "__main__":
